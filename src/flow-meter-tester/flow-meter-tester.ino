@@ -6,10 +6,10 @@
 
 MPU9250 IMU(Wire,0x69); // Because AD0 = 1 
 int status;
-File myFile;
 int ReadCycle = 1;
 const int alarmPin = 2; // The number of the pin for monitoring alarm status on DS3231
 RTC_DS3231 rtc;
+
 
 void setup() {
   Serial.begin(115200);
@@ -21,8 +21,7 @@ void setup() {
   
   SD.begin(9);
   
-  delay(1000); //Ha jó kell a készbe is
-  
+  delay(1000);  
   Serial.println("Start communication with MPU9250");
     
   status = IMU.begin();
@@ -30,21 +29,16 @@ void setup() {
     Serial.println("IMU initialization unsuccessful");
     Serial.print("Status: ");
     Serial.println(status);
+    Serial.flush();
   } else {
     Serial.println("IMU initialization successful");
+    Serial.flush();
   }
 
-  // Setting the accelerometer full scale range to +/-4G 
-  IMU.setAccelRange(MPU9250::ACCEL_RANGE_4G);
-  // Setting the gyroscope full scale range to +/-250 deg/s
-  IMU.setGyroRange(MPU9250::GYRO_RANGE_250DPS);
-  // Setting DLPF bandwidth to 5 Hz
-  IMU.setDlpfBandwidth(MPU9250::DLPF_BANDWIDTH_5HZ);
-  // Setting SRD to 49 for a 20 Hz update rate
-  IMU.setSrd(49);
-
   delay(1000);
-
+  
+  Serial.println("Start communication with DS3231 RTC");
+  
   if (! rtc.begin()) {
     Serial.println("RTC initialization unsuccessful");
     Serial.flush();
@@ -59,13 +53,15 @@ void setup() {
   rtc.clearAlarm(1);
   rtc.clearAlarm(2);
 
-  rtc.writeSqwPinMode(DS3231_OFF); // Place SQW pin into alarm interrupt mode
+  rtc.writeSqwPinMode(DS3231_OFF); // Place RTC SQW pin into alarm interrupt mode
+  
+  delay(1000);
 }
 
 void loop() {
   // Get current time and set alarm to a time to wake
   DateTime now = rtc.now();  // Get current time
-  rtc.setAlarm1(now + TimeSpan(0, 0, 0, 5), DS3231_A1_Minute);
+  rtc.setAlarm1(now + TimeSpan(0, 0, 0, 1), DS3231_A1_Minute);
 
   ReadAndWriteSensorDataToSerial(now);
   ReadAndWriteSensorData(now);
@@ -75,7 +71,7 @@ void loop() {
 }
 
 void ReadAndWriteSensorDataToSerial(DateTime now) {
-  IMU.readSensor(); // Read the sensor
+  IMU.readSensor(); // Read MPU9250 sensor values
     
   // Save sensor data
   Serial.print(ReadCycle);
@@ -111,48 +107,53 @@ void ReadAndWriteSensorDataToSerial(DateTime now) {
   Serial.print(IMU.getMagZ_uT(),6);
   Serial.print(",");
   Serial.println(IMU.getTemperature_C(),6);
-    
+  Serial.flush();  
 }
 
 void ReadAndWriteSensorData(DateTime now) {
-  myFile = SD.open("sensor.txt", FILE_WRITE); // Open file for writing
+  File myFile = SD.open("sensor.txt", FILE_WRITE); // Open file for writing
   IMU.readSensor(); // Read the sensor
-    
-  // Save sensor data
-  myFile.print(ReadCycle);
-  myFile.print(",");
-  myFile.print(now.year());
-  myFile.print("/");
-  myFile.print(now.month());
-  myFile.print("/");
-  myFile.print(now.day());
-  myFile.print(" ");
-  myFile.print(now.hour());
-  myFile.print(":");
-  myFile.print(now.minute());
-  myFile.print(":");
-  myFile.print(now.second());
-  myFile.print(",");
-  myFile.print(IMU.getAccelX_mss(),6);
-  myFile.print(",");
-  myFile.print(IMU.getAccelY_mss(),6);
-  myFile.print(",");
-  myFile.print(IMU.getAccelZ_mss(),6);
-  myFile.print(",");
-  myFile.print(IMU.getGyroX_rads(),6);
-  myFile.print(",");
-  myFile.print(IMU.getGyroY_rads(),6);
-  myFile.print(",");
-  myFile.print(IMU.getGyroZ_rads(),6);
-  myFile.print(",");
-  myFile.print(IMU.getMagX_uT(),6);
-  myFile.print(",");
-  myFile.print(IMU.getMagY_uT(),6);
-  myFile.print(",");
-  myFile.print(IMU.getMagZ_uT(),6);
-  myFile.print(",");
-  myFile.println(IMU.getTemperature_C(),6);
-    
+  
+  if (myFile) {
+    // Save sensor data
+    myFile.print(ReadCycle);
+    myFile.print(",");
+    myFile.print(now.year());
+    myFile.print("/");
+    myFile.print(now.month());
+    myFile.print("/");
+    myFile.print(now.day());
+    myFile.print(" ");
+    myFile.print(now.hour());
+    myFile.print(":");
+    myFile.print(now.minute());
+    myFile.print(":");
+    myFile.print(now.second());
+    myFile.print(",");
+    myFile.print(IMU.getAccelX_mss(),6);
+    myFile.print(",");
+    myFile.print(IMU.getAccelY_mss(),6);
+    myFile.print(",");
+    myFile.print(IMU.getAccelZ_mss(),6);
+    myFile.print(",");
+    myFile.print(IMU.getGyroX_rads(),6);
+    myFile.print(",");
+    myFile.print(IMU.getGyroY_rads(),6);
+    myFile.print(",");
+    myFile.print(IMU.getGyroZ_rads(),6);
+    myFile.print(",");
+    myFile.print(IMU.getMagX_uT(),6);
+    myFile.print(",");
+    myFile.print(IMU.getMagY_uT(),6);
+    myFile.print(",");
+    myFile.print(IMU.getMagZ_uT(),6);
+    myFile.print(",");
+    myFile.println(IMU.getTemperature_C(),6);
+  } else {
+    Serial.println("Card error...");
+    Serial.flush();
+  }
+  
   myFile.close();
 }
 
