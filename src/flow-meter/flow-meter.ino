@@ -4,27 +4,31 @@
 #include <RTClib.h>
 #include <avr/sleep.h>
 
-MPU9250 IMU(Wire,0x69); // Because AD0 = 1 
+MPU9250 IMU(Wire,0x69); // Because AD0 = 1
+RTC_DS3231 rtc;
+
 int status;
 unsigned int ReadCycle = 1;
 const int alarmPin = 2; // The number of the pin for monitoring alarm status on DS3231
-RTC_DS3231 rtc;
-const int SleepMin = 0;
-const int SleepSec = 1; 
+const int SleepMin = 5;
+const int SleepSec = 0; 
 
 void setup() {
+  pinMode(LED_BUILTIN, OUTPUT); //Status Led
   pinMode(alarmPin, INPUT_PULLUP); // Set alarm pin as pullup
   
   SD.begin(9);
   
   status = IMU.begin(); // Start communication with MPU9250
   if (status < 0) {
+    digitalWrite(LED_BUILTIN, HIGH);
     while(1) {} // Interrupt program execution
   }
 
   SetMPU9250MagCal();
   
   if (!rtc.begin()) {
+    digitalWrite(LED_BUILTIN, HIGH);
     while(1) {}
   }
   
@@ -119,7 +123,7 @@ float TiltCalculation() {
 }
 
 float HeadingCalculation() {
-    float G, ax, ay, az, H, hx, hy, hz, Hx, Hy, pitch, roll, HeadingTemp;
+    float G, ax, ay, az, H, hx, hy, hz, pitch, roll, yaw, Heading;
 
     ax = IMU.getAccelX_mss();
     ay = IMU.getAccelY_mss();
@@ -127,6 +131,7 @@ float HeadingCalculation() {
     hx = IMU.getMagX_uT();
     hy = IMU.getMagY_uT();
     hz = IMU.getMagZ_uT();
+    
     /* Normalize accelerometer and magnetometer data */
     G = sqrtf(ax * ax + ay * ay + az * az);
     ax /= G;
@@ -137,29 +142,18 @@ float HeadingCalculation() {
     hy /= H;
     hz /= H;
 
-    pitch = asin(ax);
-    roll = -asin(ay);
+    pitch = asinf(ax);
+    roll = asinf(-ay / cosf(pitch));
+    yaw = atan2f(hz * sinf(roll) - hy * cosf(roll), hx * cosf(pitch) + hy * sinf(pitch) * sinf(roll) + hz * sinf(pitch) * cosf(roll));
+    Heading = AngleCalculation(yaw) * (180/PI);
+    return Heading;
+}
 
-
-    Hx = (hx * cos(pitch)) + (hy * sin(roll) * sin(pitch)) + (hz * cos(roll) * sin(pitch));
-    Hy = (hy * cos(roll)) - (hz * sin(roll));
-    
-    HeadingTemp = -atanf(Hy/Hx) * (180/M_PI);
-    
-    if (Hx < 0 and Hy < 0)
-    {
-      HeadingTemp = 180 + HeadingTemp;
-    }
-    else if (Hx < 0 and Hy > 0)
-    {
-      HeadingTemp = 180 + HeadingTemp;
-    }
-    else if (Hx > 0 and Hy > 0)
-    {
-      HeadingTemp = 360 + HeadingTemp;
-    }
-
-    return HeadingTemp;
+float AngleCalculation(float yaw) {
+  yaw = fmod(yaw, 2.0 * PI);
+  if (yaw < 0.0)
+    yaw += 2.0 * PI;
+  return yaw;
 }
 
 void EnterSleep() {

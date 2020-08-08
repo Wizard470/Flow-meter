@@ -21,7 +21,8 @@ void setup() {
   
   SD.begin(9);
   
-  delay(1000);  
+  delay(1000);
+    
   Serial.println("Start communication with MPU9250");
     
   status = IMU.begin();
@@ -34,6 +35,8 @@ void setup() {
     Serial.println("IMU initialization successful");
     Serial.flush();
   }
+  
+  SetMPU9250MagCal();
 
   delay(1000);
   
@@ -59,6 +62,8 @@ void setup() {
 }
 
 void loop() {
+  IMU.readSensor(); // Read MPU9250 sensor values
+  
   // Get current time and set alarm to a time to wake
   DateTime now = rtc.now();  // Get current time
   rtc.setAlarm1(now + TimeSpan(0, 0, 0, 1), DS3231_A1_Minute);
@@ -70,9 +75,13 @@ void loop() {
   EnterSleep();  // Go to sleep
 }
 
+void SetMPU9250MagCal() {
+  IMU.setMagCalX(4.461882,0.977149);
+  IMU.setMagCalY(-12.536654,0.997031);
+  IMU.setMagCalZ(-29.446018,1.027077);
+}
+
 void ReadAndWriteSensorDataToSerial(DateTime now) {
-  IMU.readSensor(); // Read MPU9250 sensor values
-    
   // Save sensor data
   Serial.print(ReadCycle);
   Serial.print(",");
@@ -106,57 +115,105 @@ void ReadAndWriteSensorDataToSerial(DateTime now) {
   Serial.print(",");
   Serial.print(IMU.getMagZ_uT(),6);
   Serial.print(",");
-  Serial.println(IMU.getTemperature_C(),6);
+  Serial.print(IMU.getTemperature_C(),6);
+  Serial.print(",");
+  Serial.print(TiltCalculation(),6);
+  Serial.print(",");
+  Serial.println(HeadingCalculation(),6);
   Serial.flush();  
 }
 
 void ReadAndWriteSensorData(DateTime now) {
   File myFile = SD.open("sensor.txt", FILE_WRITE); // Open file for writing
-  IMU.readSensor(); // Read the sensor
   
-  if (myFile) {
-    // Save sensor data
-    myFile.print(ReadCycle);
-    myFile.print(",");
-    myFile.print(now.year());
-    myFile.print("/");
-    myFile.print(now.month());
-    myFile.print("/");
-    myFile.print(now.day());
-    myFile.print(" ");
-    myFile.print(now.hour());
-    myFile.print(":");
-    myFile.print(now.minute());
-    myFile.print(":");
-    myFile.print(now.second());
-    myFile.print(",");
-    myFile.print(IMU.getAccelX_mss(),6);
-    myFile.print(",");
-    myFile.print(IMU.getAccelY_mss(),6);
-    myFile.print(",");
-    myFile.print(IMU.getAccelZ_mss(),6);
-    myFile.print(",");
-    myFile.print(IMU.getGyroX_rads(),6);
-    myFile.print(",");
-    myFile.print(IMU.getGyroY_rads(),6);
-    myFile.print(",");
-    myFile.print(IMU.getGyroZ_rads(),6);
-    myFile.print(",");
-    myFile.print(IMU.getMagX_uT(),6);
-    myFile.print(",");
-    myFile.print(IMU.getMagY_uT(),6);
-    myFile.print(",");
-    myFile.print(IMU.getMagZ_uT(),6);
-    myFile.print(",");
-    myFile.println(IMU.getTemperature_C(),6);
-  } else {
-    Serial.println("Card error...");
-    Serial.flush();
-  }
+  // Save sensor data
+  myFile.print(ReadCycle);
+  myFile.print(",");
+  myFile.print(now.year());
+  myFile.print("/");
+  myFile.print(now.month());
+  myFile.print("/");
+  myFile.print(now.day());
+  myFile.print(" ");
+  myFile.print(now.hour());
+  myFile.print(":");
+  myFile.print(now.minute());
+  myFile.print(":");
+  myFile.print(now.second());
+  myFile.print(",");
+  myFile.print(IMU.getAccelX_mss(),6);
+  myFile.print(",");
+  myFile.print(IMU.getAccelY_mss(),6);
+  myFile.print(",");
+  myFile.print(IMU.getAccelZ_mss(),6);
+  myFile.print(",");
+  myFile.print(IMU.getGyroX_rads(),6);
+  myFile.print(",");
+  myFile.print(IMU.getGyroY_rads(),6);
+  myFile.print(",");
+  myFile.print(IMU.getGyroZ_rads(),6);
+  myFile.print(",");
+  myFile.print(IMU.getMagX_uT(),6);
+  myFile.print(",");
+  myFile.print(IMU.getMagY_uT(),6);
+  myFile.print(",");
+  myFile.print(IMU.getMagZ_uT(),6);
+  myFile.print(",");
+  myFile.print(IMU.getTemperature_C(),6);
+  myFile.print(",");
+  myFile.print(TiltCalculation(),6);
+  myFile.print(",");
+  myFile.println(HeadingCalculation(),6);
   
   myFile.close();
 }
+float TiltCalculation() {
+  float AccelX = IMU.getAccelY_mss();
+  float AccelY = IMU.getAccelX_mss();
+  float AccelZ = IMU.getAccelZ_mss();
+  float G;
+  float ZX;
+  float Tilt;
+  
+  G = sqrt(pow(AccelX,2)+pow(AccelY,2)+pow(AccelZ,2));
+  ZX = sqrt(pow(AccelX,2)+pow(AccelZ,2));
+  Tilt = acos(ZX/G) * (180/M_PI);
+  return Tilt;
+}
 
+float HeadingCalculation() {
+    float G, ax, ay, az, H, hx, hy, hz, pitch, roll, yaw, Heading;
+
+    ax = IMU.getAccelX_mss();
+    ay = IMU.getAccelY_mss();
+    az = IMU.getAccelZ_mss();
+    hx = IMU.getMagX_uT();
+    hy = IMU.getMagY_uT();
+    hz = IMU.getMagZ_uT();
+    
+    /* Normalize accelerometer and magnetometer data */
+    G = sqrtf(ax * ax + ay * ay + az * az);
+    ax /= G;
+    ay /= G;
+    az /= G;
+    H = sqrtf(hx * hx + hy * hy + hz * hz);
+    hx /= H;
+    hy /= H;
+    hz /= H;
+
+    pitch = asinf(ax);
+    roll = asinf(-ay / cosf(pitch));
+    yaw = atan2f(hz * sinf(roll) - hy * cosf(roll), hx * cosf(pitch) + hy * sinf(pitch) * sinf(roll) + hz * sinf(pitch) * cosf(roll));
+    Heading = AngleCalculation(yaw) * (180/PI);
+    return Heading;
+}
+
+float AngleCalculation(float yaw) {
+  yaw = fmod(yaw, 2.0 * PI);
+  if (yaw < 0.0)
+    yaw += 2.0 * PI;
+  return yaw;
+}
 void EnterSleep() {
   sleep_enable();                       // Enabling sleep mode
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);  // Setting the sleep mode, in this case full sleep
