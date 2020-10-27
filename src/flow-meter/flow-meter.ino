@@ -12,24 +12,42 @@ unsigned int ReadCycle = 1;
 const int alarmPin = 2; // The number of the pin for monitoring alarm status on DS3231
 const int SleepMin = 5;
 const int SleepSec = 0; 
+int statusLedok = 4;
+int statusLedng = 5;
 
 void setup() {
-  pinMode(LED_BUILTIN, OUTPUT); //Status Led
+  pinMode(statusLedok, OUTPUT); //Status Led
+  pinMode(statusLedng, OUTPUT); //Status Led
   pinMode(alarmPin, INPUT_PULLUP); // Set alarm pin as pullup
   
-  SD.begin(9);
+  if (!SD.begin(9)) {
+    while(1) {
+      digitalWrite(statusLedng, HIGH);
+      delay(800);
+      digitalWrite(statusLedng, LOW);
+      delay(200);
+    } // Interrupt program execution
+  }
   
   status = IMU.begin(); // Start communication with MPU9250
   if (status < 0) {
-    digitalWrite(LED_BUILTIN, HIGH);
-    while(1) {} // Interrupt program execution
+    while(1) {
+      digitalWrite(statusLedng, HIGH);
+      delay(200);
+      digitalWrite(statusLedng, LOW);
+      delay(800);
+    } // Interrupt program execution
   }
 
   SetMPU9250MagCal();
   
   if (!rtc.begin()) {
-    digitalWrite(LED_BUILTIN, HIGH);
-    while(1) {}
+    while(1) {
+      digitalWrite(statusLedng, HIGH);
+      delay(500);
+      digitalWrite(statusLedng, LOW);
+      delay(500);
+    } // Interrupt program execution
   }
   
   // Disable and clear both alarms
