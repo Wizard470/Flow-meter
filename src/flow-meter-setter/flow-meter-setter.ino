@@ -1,24 +1,16 @@
 // Setting Date and time of DS3231 RTC
-#include <RTClib.h>
+#include <DS3232RTC.h>
 #include <MPU9250.h>
 
 MPU9250 IMU(Wire,0x69);
-RTC_DS3231 rtc;
 
 int status;
 
 void setup () {
   Serial.begin(115200);
-
-  if (! rtc.begin()) {
-    Serial.println("Couldn't find RTC");
-    Serial.flush();
-    while(1) {}
-  }
-  
+   
   // Sets the RTC for the date and time the sketch was compiled
-  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-  //rtc.adjust(DateTime(2020, 7, 28, 10, 0, 0)); // Or explicitly
+  RTC.set(compileTime());
 
   ReadDateTime();
   
@@ -39,19 +31,19 @@ void loop () {
 
 }
 void ReadDateTime() {
-    DateTime now = rtc.now();
+    time_t t = RTC.get();
     Serial.print("The date is set to: ");
-    Serial.print(now.year(), DEC);
+    Serial.print(year(t), DEC);
     Serial.print('/');
-    Serial.print(now.month(), DEC);
+    Serial.print(month(t), DEC);
     Serial.print('/');
-    Serial.print(now.day(), DEC);
+    Serial.print(day(t), DEC);
     Serial.print(" ");
-    Serial.print(now.hour(), DEC);
+    Serial.print(hour(t), DEC);
     Serial.print(':');
-    Serial.print(now.minute(), DEC);
+    Serial.print(minute(t), DEC);
     Serial.print(':');
-    Serial.print(now.second(), DEC);
+    Serial.print(second(t), DEC);
     Serial.println();  
 }
 
@@ -83,4 +75,26 @@ void ReadMPU9250MagCal() {
   Serial.println(IMU.getMagScaleFactorZ(),6);
   Serial.println("---------------------------------------------------------------------------------------------------------------------------------------------------");
   Serial.flush();
+}
+
+time_t compileTime()
+{
+    const time_t FUDGE(10);    //fudge factor to allow for upload time, etc. (seconds, YMMV)
+    const char *compDate = __DATE__, *compTime = __TIME__, *months = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    char compMon[4], *m;
+
+    strncpy(compMon, compDate, 3);
+    compMon[3] = '\0';
+    m = strstr(months, compMon);
+
+    tmElements_t tm;
+    tm.Month = ((m - months) / 3 + 1);
+    tm.Day = atoi(compDate + 4);
+    tm.Year = atoi(compDate + 7) - 1970;
+    tm.Hour = atoi(compTime);
+    tm.Minute = atoi(compTime + 3);
+    tm.Second = atoi(compTime + 6);
+
+    time_t t = makeTime(tm);
+    return t + FUDGE;        //add fudge factor to allow for compile time
 }

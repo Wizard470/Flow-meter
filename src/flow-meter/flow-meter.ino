@@ -1,19 +1,17 @@
 #include <MPU9250.h>
 #include <SPI.h>
 #include <SD.h>
-#include <RTClib.h>
+#include <DS3232RTC.h>
 #include <avr/sleep.h>
 
 MPU9250 IMU(Wire,0x69); // Because AD0 = 1
-RTC_DS3231 rtc;
 
 int status;
 unsigned int ReadCycle = 1;
 const int alarmPin = 2; // The number of the pin for monitoring alarm status on DS3231
-const int SleepMin = 5;
-const int SleepSec = 0; 
-int statusLedok = 4;
-int statusLedng = 5;
+time_t MEASUREMENT_INTERVAL = 300; // Measurement cycle in seconds
+int statusLedok = 5;
+int statusLedng = 4;
 
 void setup() {
   pinMode(statusLedok, OUTPUT); //Status Led
@@ -41,32 +39,31 @@ void setup() {
 
   SetMPU9250MagCal();
   
-  if (!rtc.begin()) {
-    while(1) {
-      digitalWrite(statusLedng, HIGH);
-      delay(500);
-      digitalWrite(statusLedng, LOW);
-      delay(500);
-    } // Interrupt program execution
-  }
-  
+    
   // Disable and clear both alarms
-  rtc.disableAlarm(1);
-  rtc.disableAlarm(2);
-  rtc.clearAlarm(1);
-  rtc.clearAlarm(2);
-
-  rtc.writeSqwPinMode(DS3231_OFF); // Place SQW pin into alarm interrupt mode
+  RTC.setAlarm(ALM1_MATCH_DATE, 0, 0, 0, 1);
+  RTC.setAlarm(ALM2_MATCH_DATE, 0, 0, 0, 1);
+  RTC.alarm(ALARM_1);
+  RTC.alarm(ALARM_2);
+  RTC.alarmInterrupt(ALARM_1, true);
+  RTC.alarmInterrupt(ALARM_2, false);
+  RTC.squareWave(SQWAVE_NONE);
+  
+  digitalWrite(statusLedok, HIGH);
+  delay(1000);
+  digitalWrite(statusLedok, LOW);
 }
 
 void loop() {
   IMU.readSensor(); // Read the sensor
-  
-  // Get current time and set alarm to a time to wake
-  DateTime now = rtc.now();  // Get current time
-  rtc.setAlarm1(now + TimeSpan(0, 0, SleepMin, SleepSec), DS3231_A1_Minute); // In 5 minutes
 
-  WriteSensorData(now);
+  // Get current time and set alarm to a time to wake
+  time_t t = RTC.get();
+  time_t alarmTime = t + MEASUREMENT_INTERVAL;
+  RTC.setAlarm(ALM1_MATCH_HOURS, second(alarmTime), minute(alarmTime), hour(alarmTime), 0); 
+  RTC.alarm(ALARM_1);
+    
+  WriteSensorData(t);
   ReadCycle++;
     
   EnterSleep();  // Go to sleep
@@ -78,23 +75,23 @@ void SetMPU9250MagCal() {
   IMU.setMagCalZ(-29.446018,1.027077);
 }
 
-void WriteSensorData(DateTime now) {
+void WriteSensorData(time_t t) {
   File IMUData = SD.open("rawdata.txt", FILE_WRITE); // Open file for writing
       
   // Save sensor data
   IMUData.print(ReadCycle);
   IMUData.print(",");
-  IMUData.print(now.year());
+  IMUData.print(year(t));
   IMUData.print("/");
-  IMUData.print(now.month());
+  IMUData.print(month(t));
   IMUData.print("/");
-  IMUData.print(now.day());
+  IMUData.print(day(t));
   IMUData.print(" ");
-  IMUData.print(now.hour());
+  IMUData.print(hour(t));
   IMUData.print(":");
-  IMUData.print(now.minute());
+  IMUData.print(minute(t));
   IMUData.print(":");
-  IMUData.print(now.second());
+  IMUData.print(second(t));
   IMUData.print(",");
   IMUData.print(IMU.getAccelX_mss(),6);
   IMUData.print(",");
@@ -119,6 +116,18 @@ void WriteSensorData(DateTime now) {
 
   IMUData = SD.open("data.txt", FILE_WRITE); // Open file for writing
   IMUData.print(ReadCycle);
+  IMUData.print(",");
+  IMUData.print(year(t));
+  IMUData.print("/");
+  IMUData.print(month(t));
+  IMUData.print("/");
+  IMUData.print(day(t));
+  IMUData.print(" ");
+  IMUData.print(hour(t));
+  IMUData.print(":");
+  IMUData.print(minute(t));
+  IMUData.print(":");
+  IMUData.print(second(t));
   IMUData.print(",");
   IMUData.print(TiltCalculation(),6);
   IMUData.print(",");
@@ -186,9 +195,7 @@ void EnterSleep() {
 
   /* The program will continue from here when it wakes */
   
-  // Disable and clear alarm
-  rtc.disableAlarm(1);
-  rtc.clearAlarm(1);
+  RTC.alarm(ALARM_1); // clear the alarm flag
  }
 
 void Alarm_ISR() {
